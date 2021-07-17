@@ -8,17 +8,8 @@ from openpyxl import Workbook
 import mysql.connector
 import getopt
 import sys
-
-
-def change_format(dt):
-    if dt != '':
-        return dt.strftime("%Y/%m/%d")
-
-
-def print_hi(name):
-    # Use a breakpoint in the code line below to debug your script.
-    print(f'Hi, {name}')  # Press ⌘F8 to toggle the breakpoint.
-
+import re  # python的正则表达式模块
+import copy
 
 # See PyCharm help at https://www.jetbrains.com/help/pycharm/
 def update_db(data):
@@ -52,44 +43,76 @@ def update_db(data):
     mydb.commit()  # 数据表内容有更新，必须使用到该语句
 
 
-def format_data(lst):
-    lst[0] = change_format(lst[0])
-    lst[1] = change_format(lst[1])
-    UIN = lst[2]
+def change_date_format(dt):
+    if dt != '':
+        return dt.strftime("%Y/%m/%d")
+
+
+def format_data(lst_value):
+    lst_value[0] = change_date_format(lst_value[0])
+    lst_value[1] = change_date_format(lst_value[1])
+    UIN = lst_value[2]
     if isinstance(UIN, str) is False:
-        lst[2] = str(int(UIN))
+        UIN = str(int(UIN))
     else:
+        UIN = UIN.replace('_x000D_', '')
         UIN = UIN.strip()
-        if len(UIN) > 16:
-            return
-        lst[2] = UIN
-    lst[9] = str(lst[9])
-    lst[15] = str(lst[15])
+
+
+    lst_value[2] = UIN
+
+    Leads = str(lst_value[4]).strip()
+    lst_value[4] = Leads
+
+    pattern = r"[\s]*[+-]?[\d]+"
+    match = re.match(pattern, str(lst_value[7]).strip())
+    if match:
+        lst_value[7] = float(match.group(0))/100
+
+    match = re.match(pattern, str(lst_value[9]).strip())
+    if match:
+        lst_value[9] = int(match.group(0))
+    else:
+        lst_value[9] = 9999
+    # (expMoney) = [t(s) for t, s in
+    #                   zip((int, int), re.search('^(\d+).(\d+)$', str(lst_value[9]).strip()).groups())]
+    # lst_value[9] = float(expMoney[0])
+    # if len(expMoney) > 1 and expMoney[-1] == '+':
+    #     lst_value[9] = float(expMoney[:-1])
+    # lst_value[9] = float(lst[expMoney][0])
+
+    lst_value[15] = str(lst_value[15])
     return lst
 
 
-def check_format(str):
-    if type(str) != type('a'):
-        return False
-    str = str.strip()
-    str = str.lower()
-    if len(str) == 0 or len(str) > 5 or len(str) < 4:
+def check_legal(lst_value):
+    try:
+        UIN = lst_value[2]
+        if len(UIN) > 16 or len(UIN) < 4:
+            return False
+
+        # Company = lst_value[3]
+        # if len(Company) < 4:
+        #     return False
+
+        ExpDate = lst_value[8].strip()
+        if isinstance(ExpDate, str) is True:
+                (fq, q, fw, w) = [t(s) for t, s in
+                                  zip((str, int, str, int), re.search('^(\w)(\d)(\w)(\d+)$', ExpDate).groups())]
+    except:
         return False
 
-    fis = str[0]
-    sen = str[1]
-    thd = str[2]
-    if fis != 'q' or \
-            isinstance(int(sen), int) is not True or \
-            thd != 'w':
-        return False
     return True
 
 
-def load_excel_file(filename):
-    mapdata = {}
+def load_excel_file(filename, sheet_name=None):
+    mapData = {}
     book = openpyxl.load_workbook(filename)
-    sheet = book.active
+    if sheet_name is None:
+        sheet = book.active
+    else:
+        sheet = book.get_sheet_by_name(sheet_name)
+
     sheet.guess_types = True
     for row in sheet.iter_rows(min_row=2, max_row=sheet.max_row, min_col=1, max_col=19):
         lst_cell = []
@@ -100,33 +123,36 @@ def load_excel_file(filename):
             else:
                 lst_cell.append(cell.value)
 
-        # lst_cell[0] = change_format(lst_cell[0])
-        # lst_cell[1] = change_format(lst_cell[1])
-        # UIN = lst_cell[2]
-        # if isinstance(UIN, str) is False:
-        #     lst_cell[2] = str(int(UIN))
-        # else:
-        #     UIN = UIN.strip()
-        #     if len(UIN) > 16:
-        #         continue
-        #     lst_cell[2] = UIN
-        # lst_cell[9] = str(lst_cell[10])
-        # lst_cell[15] = str(lst_cell[15])
-        # # print(lst_cell[2], lst_cell[3], lst_cell[4])
-
-        print(lst_cell)
-        if format_data(lst_cell) is None:
+        format_data(lst_cell)
+        if lst_cell[9] < 3000.0:
             continue
+        if lst_cell[0] is None:
+            continue
+        lst_UIN = lst_cell[2].split()
+        # if len(lst_UIN) > 1:
+        #     print(1, lst_UIN)
 
-        if check_format(lst_cell[8]) is False:
-            lst_cell.append(False)
-        else:
-            lst_cell.append(True)
+        for item in lst_UIN:
+            # if len(lst_UIN) > 1:
+            #     print(item, lst_UIN)
+            lst_cell[2] = item
+            #print(lst_value)
 
-        key = str(lst_cell[2]) + lst_cell[3]
+            if check_legal(lst_cell) is False:
+                lst_cell.append(False)
+            else:
+                lst_cell.append(True)
 
-        mapdata[key] = lst_cell
-    return mapdata
+            # 登记日期 + UIN + 组
+            key = lst_cell[0] + str(lst_cell[2]) + lst_cell[5]
+            if mapData.get(key) is None:
+                value = copy.deepcopy(lst_cell)
+                mapData[key] = value
+                if len(lst_UIN) > 1:
+                    print(value, 'ld', len(mapData))
+            lst_cell.pop()
+
+    return mapData
 
 
 def write_title(sheet):
@@ -145,12 +171,16 @@ def write_excel_file(file, lstsheet):
             name = '更新'
         elif i == 2:
             name = '新增'
-        else:
+        elif i == 3:
             name = '有问题'
+        elif i == 4:
+            name = '5W'
         sheet = wb.create_sheet(title=name, index=i)
         write_title(sheet)
         nrow = 1
         for k, v in lstsheet[i].items():
+            # if v[3] == '广州金嗓音文化发展有限公司':
+            #     print(v, 'w')
             nrow = nrow + 1
             for j in range(1, len(v)):
                 sheet.cell(row=nrow, column=j).value = v[j - 1]
@@ -163,70 +193,76 @@ def cmp_value(s_lst, c_lst):
 
 
 def merge(s_file, i_file, o_file):
-    src_map = load_excel_file(s_file)
+    src_map = {}#load_excel_file(s_file, '明细')
+    src_map5W = load_excel_file(s_file, '5W+')
     cmp_map = load_excel_file(i_file)
-
     sheet1_map = {}  # all
     sheet2_map = {}  # update
     sheet3_map = {}  # add
     sheet4_map = {}  # error
+    sheet5_map = {}  # 5W+
 
-    for sk, sv in src_map.items():
-        cv = cmp_map.get(sk)
-        if cv is None:
-            flag = sv[len(sv) - 1]
-            sv.pop()
-            if flag is False:
-                sheet4_map[sk] = sv
-            sheet1_map[sk] = sv  # 未更新
-        else:
-            cmp_map.pop(sk)  # 找到值
-            if cmp_value(sv, cv) is True:
-                sheet1_map[sk] = sv
-            else:
-                sheet1_map[sk] = cv
-                flag = cv[len(cv) - 1]
-                cv.pop()
-                if flag is True:
-                    sheet2_map[sk] = cv
+    for ck, cv in cmp_map.items():
+        sv = src_map.get(ck)
+        if cv[3] == '广州金嗓音文化发展有限公司':
+            print(cv, 'm1')
+        if sv is None:  # 源文件中没有相同的值
+            flag = cv[-1]
+            cv.pop()  # 删除标记位
+            if cv[9] >= 50000.0:
+                sv = src_map5W.get(ck)
+                if sv is None:
+                    sheet5_map[ck] = cv
+            else: # 不足5万
+                if flag is False:  # 新文件值有错误
+                    sheet4_map[ck] = cv
                 else:
-                    sheet4_map[sk] = cv
+                    if cv[3] == '广州金嗓音文化发展有限公司':
+                         print(cv, 'm2')
+                    sheet3_map[ck] = cv
 
-    for ck, cv in cmp_map.items():  # 新增
-        print(cv)
-        UIN = cv[2]
-        if isinstance(UIN, str) is False:
-            cv[2] = str(int(UIN))
-        else:
-            UIN = UIN.strip()
-            if len(UIN) > 16:
-                continue
-            cv[2] = UIN
+        else:  # 源文件中有相同的值
+            if cmp_value(sv, cv) is False:  # 比较文件与源文件内容不同
+                sheet2_map[ck] = cv
 
-        expMoney = cv[9].strip()
-        if len(str(expMoney)) < 4:
-            continue
-        if expMoney[-1] == '+':
-            expMoney = expMoney[:-1]
+    # for ck, cv in cmp_map.items():  # 新增
+    #     print(cv)
+    #     UIN = cv[2]
+    #     if isinstance(UIN, str) is False:
+    #         cv[2] = str(int(UIN))
+    #     else:
+    #         UIN = UIN.strip()
+    #         if len(UIN) > 16:
+    #             continue
+    #         cv[2] = UIN
 
-        if int(float(expMoney)) < 3000:
-            continue
+        # expMoney = cv[9].strip()
+        # if len(str(expMoney)) < 4:
+        #     continue
+        # if expMoney[-1] == '+':
+        #     expMoney = expMoney[:-1]
 
-        sheet1_map[ck] = cv
-        sheet3_map[ck] = cv
-        flag = cv[len(cv) - 1]
-        cv.pop()
-        if flag is False:
-            sheet4_map[ck] = cv
+        # if int(float(expMoney)) < 3000:
+        #     continue
+
+        # sheet1_map[ck] = cv
+        # sheet3_map[ck] = cv
+        # flag = cv[len(cv) - 1]
+        # cv.pop()
+        # if flag is False:
+        #     sheet4_map[ck] = cv
 
     sheet1_map.clear()
-    lst_sheet = [sheet1_map, sheet2_map, sheet3_map, sheet4_map]
+    lst_sheet = [sheet1_map, sheet2_map, sheet3_map, sheet4_map, sheet5_map]
     write_excel_file(o_file, lst_sheet)
 
 
 # Press the green button in the gutter to run the script.
-if __name__ == '__main__':
+def lst(param):
+    pass
 
+
+if __name__ == '__main__':
     opts, args = getopt.getopt(sys.argv[1:], "hs:i:o:", ["help", "src=", "input=", "output="])
 
     for opts, arg in opts:
