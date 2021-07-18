@@ -10,6 +10,9 @@ import getopt
 import sys
 import re  # python的正则表达式模块
 import copy
+import os
+import datetime
+
 
 # See PyCharm help at https://www.jetbrains.com/help/pycharm/
 def update_db(data):
@@ -44,7 +47,7 @@ def update_db(data):
 
 
 def change_date_format(dt):
-    if dt != '':
+    if isinstance(dt, datetime.date):
         return dt.strftime("%Y/%m/%d")
 
 
@@ -58,31 +61,30 @@ def format_data(lst_value):
         UIN = UIN.replace('_x000D_', '')
         UIN = UIN.strip()
 
-
     lst_value[2] = UIN
 
     Leads = str(lst_value[4]).strip()
     lst_value[4] = Leads
 
     pattern = r"[\s]*[+-]?[\d]+"
-    match = re.match(pattern, str(lst_value[7]).strip())
-    if match:
-        lst_value[7] = float(match.group(0))/100
+
+    WinChance = lst_value[7]
+    if isinstance(WinChance, float) or isinstance(WinChance, int):
+        lst_value[7] = float(WinChance)
+    else:
+        match = re.match(pattern, str(lst_value[7]).strip())
+        if match:
+            lst_value[7] = float(match.group(0)) / 100
 
     match = re.match(pattern, str(lst_value[9]).strip())
     if match:
         lst_value[9] = int(match.group(0))
     else:
-        lst_value[9] = 9999
-    # (expMoney) = [t(s) for t, s in
-    #                   zip((int, int), re.search('^(\d+).(\d+)$', str(lst_value[9]).strip()).groups())]
-    # lst_value[9] = float(expMoney[0])
-    # if len(expMoney) > 1 and expMoney[-1] == '+':
-    #     lst_value[9] = float(expMoney[:-1])
-    # lst_value[9] = float(lst[expMoney][0])
+        lst_value[9] = 0
 
+    lst_value[14] = change_date_format(lst_value[14])
     lst_value[15] = str(lst_value[15])
-    return lst
+    return lst_value
 
 
 def check_legal(lst_value):
@@ -91,14 +93,11 @@ def check_legal(lst_value):
         if len(UIN) > 16 or len(UIN) < 4:
             return False
 
-        # Company = lst_value[3]
-        # if len(Company) < 4:
-        #     return False
-
         ExpDate = lst_value[8].strip()
         if isinstance(ExpDate, str) is True:
-                (fq, q, fw, w) = [t(s) for t, s in
-                                  zip((str, int, str, int), re.search('^(\w)(\d)(\w)(\d+)$', ExpDate).groups())]
+            (fq, q, fw, w) = [t(s) for t, s in
+                              zip((str, int, str, int), re.search(r"^(\w)(\d)(\w)(\d+)$", ExpDate).groups())]
+            #print(fq, q, fw, w)
     except:
         return False
 
@@ -123,20 +122,16 @@ def load_excel_file(filename, sheet_name=None):
             else:
                 lst_cell.append(cell.value)
 
+
         format_data(lst_cell)
-        if lst_cell[9] < 3000.0:
+        if lst_cell[9] < 3000.0 and lst_cell[9] != 0:
             continue
         if lst_cell[0] is None:
             continue
         lst_UIN = lst_cell[2].split()
-        # if len(lst_UIN) > 1:
-        #     print(1, lst_UIN)
 
         for item in lst_UIN:
-            # if len(lst_UIN) > 1:
-            #     print(item, lst_UIN)
             lst_cell[2] = item
-            #print(lst_value)
 
             if check_legal(lst_cell) is False:
                 lst_cell.append(False)
@@ -148,8 +143,8 @@ def load_excel_file(filename, sheet_name=None):
             if mapData.get(key) is None:
                 value = copy.deepcopy(lst_cell)
                 mapData[key] = value
-                if len(lst_UIN) > 1:
-                    print(value, 'ld', len(mapData))
+                #print(value)
+
             lst_cell.pop()
 
     return mapData
@@ -162,30 +157,29 @@ def write_title(sheet):
         sheet.cell(row=1, column=i).value = title[i - 1]
 
 
-def write_excel_file(file, lstsheet):
+def write_excel_file(file_name, lst_sheet):
     wb = Workbook()
-    for i in range(0, len(lstsheet)):
+    SheetName = 'Sheet1'
+    for i in range(0, len(lst_sheet)):
         if i == 0:
-            name = '全部'
+            SheetName = '全部'
         elif i == 1:
-            name = '更新'
+            SheetName = '更新'
         elif i == 2:
-            name = '新增'
+            SheetName = '新增'
         elif i == 3:
-            name = '有问题'
+            SheetName = '有问题'
         elif i == 4:
-            name = '5W'
-        sheet = wb.create_sheet(title=name, index=i)
+            SheetName = '5W'
+        sheet = wb.create_sheet(title=SheetName, index=i)
         write_title(sheet)
-        nrow = 1
-        for k, v in lstsheet[i].items():
-            # if v[3] == '广州金嗓音文化发展有限公司':
-            #     print(v, 'w')
-            nrow = nrow + 1
+        nRow = 1
+        for k, v in lst_sheet[i].items():
+            nRow = nRow + 1
             for j in range(1, len(v)):
-                sheet.cell(row=nrow, column=j).value = v[j - 1]
+                sheet.cell(row=nRow, column=j).value = v[j - 1]
 
-    wb.save(file)
+    wb.save(file_name)
 
 
 def cmp_value(s_lst, c_lst):
@@ -193,7 +187,7 @@ def cmp_value(s_lst, c_lst):
 
 
 def merge(s_file, i_file, o_file):
-    src_map = {}#load_excel_file(s_file, '明细')
+    src_map = load_excel_file(s_file, '明细')
     src_map5W = load_excel_file(s_file, '5W+')
     cmp_map = load_excel_file(i_file)
     sheet1_map = {}  # all
@@ -204,8 +198,6 @@ def merge(s_file, i_file, o_file):
 
     for ck, cv in cmp_map.items():
         sv = src_map.get(ck)
-        if cv[3] == '广州金嗓音文化发展有限公司':
-            print(cv, 'm1')
         if sv is None:  # 源文件中没有相同的值
             flag = cv[-1]
             cv.pop()  # 删除标记位
@@ -213,71 +205,63 @@ def merge(s_file, i_file, o_file):
                 sv = src_map5W.get(ck)
                 if sv is None:
                     sheet5_map[ck] = cv
-            else: # 不足5万
+            else:  # 不足5万
                 if flag is False:  # 新文件值有错误
                     sheet4_map[ck] = cv
                 else:
-                    if cv[3] == '广州金嗓音文化发展有限公司':
-                         print(cv, 'm2')
                     sheet3_map[ck] = cv
 
         else:  # 源文件中有相同的值
             if cmp_value(sv, cv) is False:  # 比较文件与源文件内容不同
                 sheet2_map[ck] = cv
 
-    # for ck, cv in cmp_map.items():  # 新增
-    #     print(cv)
-    #     UIN = cv[2]
-    #     if isinstance(UIN, str) is False:
-    #         cv[2] = str(int(UIN))
-    #     else:
-    #         UIN = UIN.strip()
-    #         if len(UIN) > 16:
-    #             continue
-    #         cv[2] = UIN
-
-        # expMoney = cv[9].strip()
-        # if len(str(expMoney)) < 4:
-        #     continue
-        # if expMoney[-1] == '+':
-        #     expMoney = expMoney[:-1]
-
-        # if int(float(expMoney)) < 3000:
-        #     continue
-
-        # sheet1_map[ck] = cv
-        # sheet3_map[ck] = cv
-        # flag = cv[len(cv) - 1]
-        # cv.pop()
-        # if flag is False:
-        #     sheet4_map[ck] = cv
-
     sheet1_map.clear()
     lst_sheet = [sheet1_map, sheet2_map, sheet3_map, sheet4_map, sheet5_map]
     write_excel_file(o_file, lst_sheet)
 
 
-# Press the green button in the gutter to run the script.
-def lst(param):
-    pass
-
-
 if __name__ == '__main__':
-    opts, args = getopt.getopt(sys.argv[1:], "hs:i:o:", ["help", "src=", "input=", "output="])
 
+    opts, args = getopt.getopt(sys.argv[1:], "hs:i:o:", ["help", "src=", "input=", "output="])
+    src_dir = ''
     for opts, arg in opts:
-        print(opts)
+        # print(opts)
         if opts == "-h" or opts == "--help":
             print("我只是一个说明文档")
         elif opts == "-s" or opts == "--src":
-            src_file = arg
+            src_dir = arg
+            print(opts + '=' + arg)
         elif opts == "-i" or opts == "--input":
             input_file = arg
+            print(opts + '=' + arg)
         elif opts == "-o" or opts == "--output":
             output_file = arg
+            print(opts + '=' + arg)
 
-    # print_hi('PyCharm')
-    if len(sys.argv) < 4:
+    if os.path.isdir(src_dir):
+        print("it's a directory")
+    elif os.path.isfile(src_dir):
+        print("it's a normal file")
+        exit(0)
+    else:
+        print("it's a special file(socket,FIFO,device file)")
         exit(0)
 
-    merge(src_file, input_file, output_file)
+    dst_dir = os.path.join(src_dir, 'dst')
+    if os.path.isdir(dst_dir) is False:
+        os.mkdir(os.path.join(dst_dir))
+
+    for root, dirs, files in os.walk(src_dir):
+        while len(dirs) > 0:
+            dirs.pop()
+        for file in files:
+            input_file = os.path.join(root, file)
+            output_file = os.path.join(root, 'dst/dst-' + file)
+
+            if file == 'src.xlsx' or file == '.DS_Store' or file.find('dst-') == 0:
+                print(file.find('dst-'))
+                continue
+
+            print(input_file, output_file)
+            merge(os.path.join(root, 'src.xlsx'), input_file, output_file)
+        next(os.walk(src_dir))
