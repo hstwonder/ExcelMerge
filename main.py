@@ -48,7 +48,7 @@ def update_db(data):
 
 def change_date_format(dt):
     if isinstance(dt, datetime.date):
-        return dt.strftime("%Y/%m/%d")
+        return dt.strftime("%Y/%0m/%0d")
 
 
 def format_data(lst_value):
@@ -186,10 +186,7 @@ def cmp_value(s_lst, c_lst):
     return True
 
 
-def merge(s_file, i_file, o_file):
-    src_map = load_excel_file(s_file, '明细')
-    src_map5W = load_excel_file(s_file, '5W+')
-    cmp_map = load_excel_file(i_file)
+def merge(src_map, src_map5W, cmp_map):
     sheet1_map = {}  # all
     sheet2_map = {}  # update
     sheet3_map = {}  # add
@@ -216,8 +213,15 @@ def merge(s_file, i_file, o_file):
                 sheet2_map[ck] = cv
 
     sheet1_map.clear()
-    lst_sheet = [sheet1_map, sheet2_map, sheet3_map, sheet4_map, sheet5_map]
-    write_excel_file(o_file, lst_sheet)
+    return [sheet1_map, sheet2_map, sheet3_map, sheet4_map, sheet5_map]
+
+
+# def merge(s_file, i_file, o_file):
+#     src_map = load_excel_file(s_file, '明细')
+#     src_map5W = load_excel_file(s_file, '5W+')
+#     cmp_map = load_excel_file(i_file)
+#
+#     return merge(src_map, src_map5W, cmp_map, o_file)
 
 
 if __name__ == '__main__':
@@ -251,7 +255,11 @@ if __name__ == '__main__':
     if os.path.isdir(dst_dir) is False:
         os.mkdir(os.path.join(dst_dir))
 
+    cmp_map = {}
     for root, dirs, files in os.walk(src_dir):
+        src_map = load_excel_file(os.path.join(root, 'src.xlsx'), '明细')
+        src_map5W = load_excel_file(os.path.join(root, 'src.xlsx'), '5W+')
+
         while len(dirs) > 0:
             dirs.pop()
         for file in files:
@@ -262,6 +270,9 @@ if __name__ == '__main__':
                 print(file.find('dst-'))
                 continue
 
-            print(input_file, output_file)
-            merge(os.path.join(root, 'src.xlsx'), input_file, output_file)
-        next(os.walk(src_dir))
+            print(input_file)
+            cmp_map.update(load_excel_file(input_file))
+
+        lst_sheet = merge(src_map, src_map5W, cmp_map)
+
+        write_excel_file(output_file, lst_sheet)
