@@ -2,10 +2,10 @@
 
 # Press ⌃R to execute it or replace it with your code.
 # Press Double ⇧ to search everywhere for classes, files, tool windows, actions, and settings.
-
+import mysql
 import openpyxl
 from openpyxl import Workbook
-import mysql.connector
+
 import getopt
 import sys
 import re  # python的正则表达式模块
@@ -23,27 +23,28 @@ def update_db(data):
     #     database="intent"
     # )
 
-    mydb = mysql.connector.connect(
-        host="localhost",  # 数据库主机地址
-        user="root",  # 数据库用户名
-        passwd="123456789",  # 数据库密码
-        database="intent"
-    )
-    mycursor = mydb.cursor()
-
-    sql = "INSERT INTO KA (regist, lastreach, UIN, company, leads, " \
-          "team, sale, winchance, exporder, expmoney" \
-          "produce, stuckpoint, customerbusiness, ascription, order, " \
-          "money, first, remark) " \
-          "VALUES (%s, %s, %s, %s, %s, " \
-          "%s, %s, %d, %s, %d," \
-          "%s, %s, %s, %d, %s," \
-          "%d, %d, %s)"
-
-    val = tuple(data)
-    print(val)
-    mycursor.execute(sql, val)
-    mydb.commit()  # 数据表内容有更新，必须使用到该语句
+    # mydb = mysql.connector.connect(
+    #     host="localhost",  # 数据库主机地址
+    #     user="root",  # 数据库用户名
+    #     passwd="123456789",  # 数据库密码
+    #     database="intent"
+    # )
+    # mycursor = mydb.cursor()
+    #
+    # sql = "INSERT INTO KA (regist, lastreach, UIN, company, leads, " \
+    #       "team, sale, winchance, exporder, expmoney" \
+    #       "produce, stuckpoint, customerbusiness, ascription, order, " \
+    #       "money, first, remark) " \
+    #       "VALUES (%s, %s, %s, %s, %s, " \
+    #       "%s, %s, %d, %s, %d," \
+    #       "%s, %s, %s, %d, %s," \
+    #       "%d, %d, %s)"
+    #
+    # val = tuple(data)
+    # print(val)
+    # mycursor.execute(sql, val)
+    # mydb.commit()  # 数据表内容有更新，必须使用到该语句
+    return
 
 
 def change_date_format(dt):
@@ -97,7 +98,7 @@ def check_legal(lst_value):
         if isinstance(ExpDate, str) is True:
             (fq, q, fw, w) = [t(s) for t, s in
                               zip((str, int, str, int), re.search(r"^(\w)(\d)(\w)(\d+)$", ExpDate).groups())]
-            #print(fq, q, fw, w)
+            # print(fq, q, fw, w)
     except:
         return False
 
@@ -122,7 +123,6 @@ def load_excel_file(filename, sheet_name=None):
             else:
                 lst_cell.append(cell.value)
 
-
         format_data(lst_cell)
         if lst_cell[9] < 3000.0 and lst_cell[9] != 0:
             continue
@@ -143,7 +143,7 @@ def load_excel_file(filename, sheet_name=None):
             if mapData.get(key) is None:
                 value = copy.deepcopy(lst_cell)
                 mapData[key] = value
-                #print(value)
+                # print(value)
 
             lst_cell.pop()
 
@@ -170,7 +170,9 @@ def write_excel_file(file_name, lst_sheet):
         elif i == 3:
             SheetName = '有问题'
         elif i == 4:
-            SheetName = '5W'
+            SheetName = '50K'
+        elif i == 5:
+            SheetName = '10K'
         sheet = wb.create_sheet(title=SheetName, index=i)
         write_title(sheet)
         nRow = 1
@@ -186,34 +188,44 @@ def cmp_value(s_lst, c_lst):
     return True
 
 
-def merge(src_map, src_map5W, cmp_map):
+def merge(dict_src, dict_src_10k, dict_src_50k, dict_cmp):
     sheet1_map = {}  # all
     sheet2_map = {}  # update
     sheet3_map = {}  # add
     sheet4_map = {}  # error
     sheet5_map = {}  # 5W+
+    sheet6_map = {}  # 10K
 
-    for ck, cv in cmp_map.items():
-        sv = src_map.get(ck)
-        if sv is None:  # 源文件中没有相同的值
+    for ck, cv in dict_cmp.items():
+        if cv[9] >= 50000.0:
+            sv = dict_src_50k.get(ck)
+            if sv is None:
+                sheet5_map[ck] = cv
+        elif cv[9] >= 10000.0:
+            sv = dict_src_10k.get(ck)
             flag = cv[-1]
             cv.pop()  # 删除标记位
-            if cv[9] >= 50000.0:
-                sv = src_map5W.get(ck)
-                if sv is None:
-                    sheet5_map[ck] = cv
-            else:  # 不足5万
-                if flag is False:  # 新文件值有错误
-                    sheet4_map[ck] = cv
-                else:
-                    sheet3_map[ck] = cv
-
-        else:  # 源文件中有相同的值
-            if cmp_value(sv, cv) is False:  # 比较文件与源文件内容不同
-                sheet2_map[ck] = cv
+            if flag is False:  # 新文件值有错误
+                sheet4_map[ck] = cv
+            elif sv is None:    # 源文件中没有相同的值
+                sheet6_map[ck] = cv
+            else:
+                if cmp_value(sv, cv) is False:  # 比较文件与源文件内容差异
+                    sheet2_map[ck] = cv
+        else:
+            sv = dict_src.get(ck)
+            flag = cv[-1]
+            cv.pop()  # 删除标记位
+            if flag is False:  # 新文件值有错误
+                sheet4_map[ck] = cv
+            elif sv is None:  # 源文件中没有相同的值
+                sheet3_map[ck] = cv
+            else:  # 源文件中有相同的值
+                if cmp_value(sv, cv) is False:  # 比较文件与源文件内容差异
+                    sheet2_map[ck] = cv
 
     sheet1_map.clear()
-    return [sheet1_map, sheet2_map, sheet3_map, sheet4_map, sheet5_map]
+    return [sheet1_map, sheet2_map, sheet3_map, sheet4_map, sheet5_map, sheet6_map]
 
 
 # def merge(s_file, i_file, o_file):
@@ -251,14 +263,15 @@ if __name__ == '__main__':
         print("it's a special file(socket,FIFO,device file)")
         exit(0)
 
-    dst_dir = os.path.join(src_dir, 'dst')
-    if os.path.isdir(dst_dir) is False:
-        os.mkdir(os.path.join(dst_dir))
+    # dst_dir = os.path.join(src_dir, 'dst')
+    # if os.path.isdir(dst_dir) is False:
+    #     os.mkdir(os.path.join(dst_dir))
 
-    cmp_map = {}
+    cmp_map = {} #11
     for root, dirs, files in os.walk(src_dir):
         src_map = load_excel_file(os.path.join(root, 'src.xlsx'), '明细')
-        src_map5W = load_excel_file(os.path.join(root, 'src.xlsx'), '5W+')
+        src_map50K = load_excel_file(os.path.join(root, 'src.xlsx'), '明细-50K')
+        src_map10K = load_excel_file(os.path.join(root, 'src.xlsx'), '明细-10K')
 
         while len(dirs) > 0:
             dirs.pop()
@@ -273,6 +286,6 @@ if __name__ == '__main__':
             print(input_file)
             cmp_map.update(load_excel_file(input_file))
 
-        lst_sheet = merge(src_map, src_map5W, cmp_map)
+        lst_sheet = merge(src_map, src_map10K, src_map50K, cmp_map)
 
-        write_excel_file(output_file, lst_sheet)
+        write_excel_file(os.path.join(root, "dst.xlsx"), lst_sheet)
