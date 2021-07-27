@@ -237,7 +237,7 @@ def merge(dict_src, dict_src_10k, dict_src_50k, dict_cmp):
 
 
 if __name__ == '__main__':
-
+    # test
     opts, args = getopt.getopt(sys.argv[1:], "hs:i:o:", ["help", "src=", "input=", "output="])
     src_dir = ''
     for opts, arg in opts:
