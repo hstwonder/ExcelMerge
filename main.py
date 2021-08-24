@@ -2,7 +2,7 @@
 
 # Press ⌃R to execute it or replace it with your code.
 # Press Double ⇧ to search everywhere for classes, files, tool windows, actions, and settings.
-#import mysql
+# import mysql
 import openpyxl
 from openpyxl import Workbook
 
@@ -105,16 +105,59 @@ def check_legal(lst_value):
     return True
 
 
-def load_excel_file(filename, sheet_name=None):
+def sync_list_value(lst_Value_Old, lst_Value_New):
+    # title = ["0登记时间", "1最近触达时间", "2UIN", "3客户名称", "4Leads来源", "5主管", "6销售", "7赢单率", "8预计下单时间",
+    #          "9商机金额（预估）", "10一级产品", "11卡点", "12客户业务", "13状态（电销/SMB）", "14实际下单时间", "15实际金额", "16备注"]
+    lst_Value = lst_Value_Old
+    # 登记日期
+    if lst_Value_Old[0] >= lst_Value_New[0]:
+        lst_Value[0] = lst_Value_New[0]
+
+    # 最后触达
+    if lst_Value_Old[1] <= lst_Value_New[1]:
+        lst_Value[1] = lst_Value_New[1]
+
+    # 主管
+    if lst_Value_Old[5].strip() != lst_Value_New[5].strip():
+        lst_Value[5] = lst_Value_New[5]
+
+    # 销售
+    if lst_Value_Old[6].strip() != lst_Value_New[6].strip():
+        lst_Value[6] = lst_Value_New[6]
+
+    # 赢单率
+    if lst_Value_Old[7] <= lst_Value_New[7]:
+        lst_Value[7] = lst_Value_New[7]
+
+    # 商机金额（预估）
+    if lst_Value_Old[8] <= lst_Value_New[8]:
+        lst_Value[8] = lst_Value_New[8]
+
+    # 11卡点"
+    if lst_Value_Old[11].strip() != lst_Value_New[11].strip():
+        lst_Value[11] = lst_Value_Old[11].strip() + "\n" + lst_Value_New[11].strip()
+
+    # "12客户业务
+    if lst_Value_Old[12].strip() != lst_Value_New[12].strip():
+        lst_Value[12] = lst_Value_Old[12].strip() + "\n" + lst_Value_New[11].strip()
+
+    # "16客户业务
+    if lst_Value_Old[16].strip() != lst_Value_New[16].strip():
+        lst_Value[16] = lst_Value_Old[16].strip() + "\n" + lst_Value_New[16].strip()
+
+    return lst_Value
+
+
+def load_excel_file(filename, sheet_name=None, maxcol=18):
     mapData = {}
     book = openpyxl.load_workbook(filename)
     if sheet_name is None:
         sheet = book.active
     else:
-        sheet = book.get_sheet_by_name(sheet_name)
+        sheet = book[sheet_name] #.get_sheet_by_name(sheet_name)
 
     sheet.guess_types = True
-    for row in sheet.iter_rows(min_row=2, max_row=sheet.max_row, min_col=1, max_col=19):
+    for row in sheet.iter_rows(min_row=2, max_row=sheet.max_row, min_col=1, max_col=maxcol):
         lst_cell = []
         for cell in row:
             # print(cell.value, end=" ")
@@ -131,33 +174,37 @@ def load_excel_file(filename, sheet_name=None):
         lst_UIN = lst_cell[2].split()
 
         for item in lst_UIN:
+            if item.isdigit() is False:
+                continue
             lst_cell[2] = item
-
             if check_legal(lst_cell) is False:
                 lst_cell.append(False)
             else:
                 lst_cell.append(True)
 
             # 登记日期 + UIN + 组
-            key = lst_cell[0] + str(lst_cell[2]) + lst_cell[5]
+            # key = lst_cell[0] + str(lst_cell[2]) + lst_cell[5]
+            key = str(lst_cell[2])  # UIN
             if mapData.get(key) is None:
                 value = copy.deepcopy(lst_cell)
-                mapData[key] = value
                 # print(value)
+            # else:
+            #     value = copy.deepcopy(sync_list_value(mapData.get(key), lst_cell))
 
+            mapData[key] = value
             lst_cell.pop()
 
     return mapData
 
 
-def write_title(sheet):
+def write_title(sheet, titlen):
     title = ["登记时间", "最近触达时间", "UIN", "客户名称", "Leads来源", "主管", "销售", "赢单率", "预计下单时间",
-             "商机金额（预估）", "一级产品", "卡点", "客户业务", "状态（电销/SMB）", "实际下单时间", "实际金额", "是否首次采购", "备注"]
-    for i in range(1, len(title) + 1):
-        sheet.cell(row=1, column=i).value = title[i - 1]
+             "商机金额（预估）", "一级产品", "卡点", "客户业务", "状态（电销/SMB）", "实际下单时间", "实际金额", "备注"]
+    for i in range(0, titlen):
+        sheet.cell(row=1, column=i+1).value = title[i]
 
 
-def write_excel_file(file_name, lst_sheet):
+def write_excel_file(file_name, lst_sheet, titlen=17):
     wb = Workbook()
     SheetName = 'Sheet1'
     for i in range(0, len(lst_sheet)):
@@ -174,7 +221,7 @@ def write_excel_file(file_name, lst_sheet):
         elif i == 5:
             SheetName = '10K'
         sheet = wb.create_sheet(title=SheetName, index=i)
-        write_title(sheet)
+        write_title(sheet, titlen)
         nRow = 1
         for k, v in lst_sheet[i].items():
             nRow = nRow + 1
@@ -185,6 +232,8 @@ def write_excel_file(file_name, lst_sheet):
 
 
 def cmp_value(s_lst, c_lst):
+    if s_lst[9] < c_lst[9]:
+        return False
     return True
 
 
@@ -197,6 +246,12 @@ def merge(dict_src, dict_src_10k, dict_src_50k, dict_cmp):
     sheet6_map = {}  # 10K
 
     for ck, cv in dict_cmp.items():
+        if str(ck) == '100016220495':#100000682658
+            a = 1+1
+            b = 1+2
+            print(a+b)
+            print(cv)
+
         if cv[9] >= 50000.0:
             sv = dict_src_50k.get(ck)
             if sv is None:
@@ -207,7 +262,7 @@ def merge(dict_src, dict_src_10k, dict_src_50k, dict_cmp):
             cv.pop()  # 删除标记位
             if flag is False:  # 新文件值有错误
                 sheet4_map[ck] = cv
-            elif sv is None:    # 源文件中没有相同的值
+            elif sv is None:  # 源文件中没有相同的值
                 sheet6_map[ck] = cv
             else:
                 if cmp_value(sv, cv) is False:  # 比较文件与源文件内容差异
@@ -237,7 +292,7 @@ def merge(dict_src, dict_src_10k, dict_src_50k, dict_cmp):
 
 
 if __name__ == '__main__':
-    # test
+
     opts, args = getopt.getopt(sys.argv[1:], "hs:i:o:", ["help", "src=", "input=", "output="])
     src_dir = ''
     for opts, arg in opts:
@@ -267,7 +322,7 @@ if __name__ == '__main__':
     # if os.path.isdir(dst_dir) is False:
     #     os.mkdir(os.path.join(dst_dir))
 
-    cmp_map = {} #11
+    cmp_map = {}  # 11
     for root, dirs, files in os.walk(src_dir):
         src_map = load_excel_file(os.path.join(root, 'src.xlsx'), '明细')
         src_map50K = load_excel_file(os.path.join(root, 'src.xlsx'), '明细-50K')
@@ -289,3 +344,24 @@ if __name__ == '__main__':
         lst_sheet = merge(src_map, src_map10K, src_map50K, cmp_map)
 
         write_excel_file(os.path.join(root, "dst.xlsx"), lst_sheet)
+
+    # src_map10K = load_excel_file(os.path.join(root, 'src.xlsx'), '明细-10K', 20)
+    # src_mapWZL = load_excel_file(os.path.join(root, 'src.xlsx'), '王智林', 20)
+    # src_mapWXM = load_excel_file(os.path.join(root, 'src.xlsx'), '王晓明', 20)
+    # src_mapSDZ = load_excel_file(os.path.join(root, 'src.xlsx'), '粟德志', 20)
+    # src_mapWWS = load_excel_file(os.path.join(root, 'src.xlsx'), '汪吴水', 20)
+    #
+    # for k, v in src_map10K.items():
+    #     if src_mapWWS.get(k) is not None:
+    #         v.append("汪吴水")
+    #         v.append(src_mapWWS[k][20])
+    #     elif src_mapSDZ.get(k) is not None:
+    #         v.append("粟德志")
+    #         v.append(src_mapSDZ[k][20])
+    #     if src_mapWXM.get(k) is not None:
+    #         v.append("王晓明")
+    #         v.append(src_mapWXM[k][20])
+    #     if src_mapWZL.get(k) is not None:
+    #         v.append("王智林")
+    #         v.append(src_mapWZL[k][20])
+
