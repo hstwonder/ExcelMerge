@@ -148,7 +148,7 @@ def sync_list_value(lst_Value_Old, lst_Value_New):
     return lst_Value
 
 
-def load_excel_file(filename, sheet_name=None, maxcol=18):
+def load_excel_file(filename, sheet_name=None, maxcol=17):
     mapData = {}
     book = openpyxl.load_workbook(filename)
     if sheet_name is None:
@@ -199,7 +199,7 @@ def load_excel_file(filename, sheet_name=None, maxcol=18):
 
 def write_title(sheet, titlen):
     title = ["登记时间", "最近触达时间", "UIN", "客户名称", "Leads来源", "主管", "销售", "赢单率", "预计下单时间",
-             "商机金额（预估）", "一级产品", "卡点", "客户业务", "状态（电销/SMB）", "实际下单时间", "实际金额", "备注"]
+             "商机金额（预估）", "一级产品", "卡点", "客户业务", "状态（电销/SMB）", "实际下单时间", "实际金额", "备注", "跟进人", "跟进状态"]
     for i in range(0, titlen):
         sheet.cell(row=1, column=i+1).value = title[i]
 
@@ -225,7 +225,7 @@ def write_excel_file(file_name, lst_sheet, titlen=17):
         nRow = 1
         for k, v in lst_sheet[i].items():
             nRow = nRow + 1
-            for j in range(1, len(v)):
+            for j in range(1, len(v)+1):
                 sheet.cell(row=nRow, column=j).value = v[j - 1]
 
     wb.save(file_name)
@@ -328,40 +328,51 @@ if __name__ == '__main__':
         src_map50K = load_excel_file(os.path.join(root, 'src.xlsx'), '明细-50K')
         src_map10K = load_excel_file(os.path.join(root, 'src.xlsx'), '明细-10K')
 
-        while len(dirs) > 0:
-            dirs.pop()
-        for file in files:
-            input_file = os.path.join(root, file)
-            output_file = os.path.join(root, 'dst/dst-' + file)
+        # while len(dirs) > 0:
+        #     dirs.pop()
+        # for file in files:
+        #     input_file = os.path.join(root, file)
+        #     output_file = os.path.join(root, 'dst/dst-' + file)
+        #
+        #     if file == 'src.xlsx' or file == '.DS_Store' or file.find('dst-') == 0:
+        #         print(file.find('dst-'))
+        #         continue
+        #
+        #     print(input_file)
+        #     cmp_map.update(load_excel_file(input_file))
+        #
+        # lst_sheet = merge(src_map, src_map10K, src_map50K, cmp_map)
+        #
+        # write_excel_file(os.path.join(root, "dst.xlsx"), lst_sheet)
 
-            if file == 'src.xlsx' or file == '.DS_Store' or file.find('dst-') == 0:
-                print(file.find('dst-'))
-                continue
+    src_map10K = load_excel_file(os.path.join(root, 'src.xlsx'), '明细-10K')
+    src_mapWZL = load_excel_file(os.path.join(root, 'src.xlsx'), '王智林', 19)
+    src_mapWXM = load_excel_file(os.path.join(root, 'src.xlsx'), '王晓明', 19)
+    src_mapSDZ = load_excel_file(os.path.join(root, 'src.xlsx'), '粟德志', 19)
+    src_mapWWS = load_excel_file(os.path.join(root, 'src.xlsx'), '汪吴水', 19)
 
-            print(input_file)
-            cmp_map.update(load_excel_file(input_file))
+    i = 0
+    for k, v in src_map10K.items():
+        v.pop()
+        value = copy.deepcopy(v)
+        if src_mapWWS.get(k):
+            value.append("汪吴水")
+            value.append(src_mapWWS[k][18])
+        elif src_mapSDZ.get(k):
+            value.append("粟德志")
+            value.append(src_mapSDZ[k][18])
+        elif src_mapWXM.get(k):
+            value.append("王晓明")
+            value.append(src_mapWXM[k][18])
+        elif src_mapWZL.get(k):
+            value.append("王智林")
+            value.append(src_mapWZL[k][18])
+        else:
+            i = i+1
+            print(i)
+        src_map10K[k] = value
+        print(src_map10K[k])
+    lst_sheet = [src_map10K]
 
-        lst_sheet = merge(src_map, src_map10K, src_map50K, cmp_map)
-
-        write_excel_file(os.path.join(root, "dst.xlsx"), lst_sheet)
-
-    # src_map10K = load_excel_file(os.path.join(root, 'src.xlsx'), '明细-10K', 20)
-    # src_mapWZL = load_excel_file(os.path.join(root, 'src.xlsx'), '王智林', 20)
-    # src_mapWXM = load_excel_file(os.path.join(root, 'src.xlsx'), '王晓明', 20)
-    # src_mapSDZ = load_excel_file(os.path.join(root, 'src.xlsx'), '粟德志', 20)
-    # src_mapWWS = load_excel_file(os.path.join(root, 'src.xlsx'), '汪吴水', 20)
-    #
-    # for k, v in src_map10K.items():
-    #     if src_mapWWS.get(k) is not None:
-    #         v.append("汪吴水")
-    #         v.append(src_mapWWS[k][20])
-    #     elif src_mapSDZ.get(k) is not None:
-    #         v.append("粟德志")
-    #         v.append(src_mapSDZ[k][20])
-    #     if src_mapWXM.get(k) is not None:
-    #         v.append("王晓明")
-    #         v.append(src_mapWXM[k][20])
-    #     if src_mapWZL.get(k) is not None:
-    #         v.append("王智林")
-    #         v.append(src_mapWZL[k][20])
+    write_excel_file(os.path.join(root, "dst1.xlsx"), lst_sheet, 19)
 
